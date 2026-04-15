@@ -1,0 +1,53 @@
+services:
+  redis:
+    image: redis:alpine
+    container_name: footprint_redis
+    ports:
+      - "6379:6379"
+    restart: always
+
+  ingestion:
+    build: ./backend
+    container_name: footprint_ingestion
+    command: python fyers_ingestion.py
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=Asia/Kolkata
+    env_file: .env
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  brain:
+    build: ./backend
+    container_name: footprint_brain
+    command: python mtf_brain.py
+    extra_hosts:                   # ADD THESE TWO LINES
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "5678:5678" # Opened to the outside for your React dashboard and Fyers Login
+    volumes:
+      - footprint_data:/app/data
+      - ./.env:/app/.env
+      - ./backend_engine.log:/app/backend_engine.log   # <--- 🛡️ NEW: Binds the log file to your VPS!
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DB_PATH=/app/data/nifty_footprint.db
+      - SERVER_URL=http://103.168.18.1:5678 # Your public VPS IP
+      - TZ=Asia/Kolkata
+    env_file: .env
+    depends_on:
+      - redis
+    restart: unless-stopped
+  
+  footprint_frontend:
+    build: ./frontend
+    container_name: footprint_frontend
+    ports:
+      - "5174:5173" 
+    depends_on:
+      - brain
+    restart: unless-stopped
+
+volumes:
+  footprint_data:
